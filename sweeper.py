@@ -6,8 +6,7 @@ def createnoise(w, h, bt, ws, bc,cx,cy):  # width, height, bomb count, white spa
     bombs_placed = 0
     while bombs_placed < bt:
         x, y = randint(0, w - 1), randint(0, h - 1)
-        if arr[x][y] != bc and (x,y) != (cx,cy):  # Only place a bomb if the cell is empty and not the input cell
-            arr[x][y] = bc
+        if arr[x][y] != bc and (x,y) != (cx,cy):  # Only place a bomb if the cell is empty and not the inputc = bc
             bombs_placed += 1
     return arr
 
@@ -49,14 +48,13 @@ def click(arr, maskedarr, x, y, ws, w, h, mc):
         maskedarr[x][y] = str(arr[x][y])
     return maskedarr, True
 
-def flag(arr, maskedarr, x, y, ws, w, h, mc):  # flag a cell
+def flag(maskedarr, x, y, mc):  # flag a cell
     if maskedarr[x][y] == mc:
         maskedarr[x][y] = flag
     elif maskedarr[x][y] == flag:
         maskedarr[x][y] = mc
-    else:
-        print("Already clicked")
     return maskedarr
+
 def checkwin(arr,maskedarr, bc, w, h, mc,flag):
     for i in range(w): 
         for j in range(h):
@@ -69,14 +67,14 @@ def checkwin(arr,maskedarr, bc, w, h, mc,flag):
 
 def start(h, w, ws, bt, bc, mc): #basic tui for testing  # height, width, white space, bomb count, bomb character, masked character
     maskedarr = [[mc for _ in range(h)] for _ in range(w)]
-    cy, cx = map(int, input("Enter coordinates (y x): ").split())
+    cy, cx = map(int, inputc().split())
     arr = createnoise(w, h, bt, ws, bc, cx,cy)
     arr = countbombs(arr)  # Count bombs before clicking
     game = True
     maskedarr,game = click(arr, maskedarr, cx, cy, ws, w, h, mc)
     while game:
         printarr(maskedarr)
-        y,x = map(int, input("Enter coordinates (x y): ").split())
+        y,x = map(int, inputc().split())
         if maskedarr[x][y] == mc:
             maskedarr,game = click(arr, maskedarr, x, y, ws, w, h, mc)
         else:
