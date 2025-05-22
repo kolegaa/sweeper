@@ -1,5 +1,4 @@
 from random import randint
-import pytermgui
 
 def createnoise(w, h, bt, ws, bc,cx,cy):  # width, height, bomb count, white space, bomb character
     arr = [[ws for _ in range(h)] for _ in range(w)]
@@ -64,6 +63,8 @@ def checkwin(arr,maskedarr, bc, w, h, mc,flag):
                 return False
     return True 
 
+def inputc():
+    return input("Enter coords (y x)")
 
 def start(h, w, ws, bt, bc, mc): #basic tui for testing  # height, width, white space, bomb count, bomb character, masked character
     maskedarr = [[mc for _ in range(h)] for _ in range(w)]
