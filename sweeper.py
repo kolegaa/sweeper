@@ -1,4 +1,5 @@
 from random import randint
+import pytermgui
 
 def createnoise(w, h, bt, ws, bc,cx,cy):  # width, height, bomb count, white space, bomb character
     arr = [[ws for _ in range(h)] for _ in range(w)]
@@ -47,6 +48,24 @@ def click(arr, maskedarr, x, y, ws, w, h, mc):
     else:
         maskedarr[x][y] = str(arr[x][y])
     return maskedarr, True
+
+def flag(arr, maskedarr, x, y, ws, w, h, mc):  # flag a cell
+    if maskedarr[x][y] == mc:
+        maskedarr[x][y] = flag
+    elif maskedarr[x][y] == flag:
+        maskedarr[x][y] = mc
+    else:
+        print("Already clicked")
+    return maskedarr
+def checkwin(arr,maskedarr, bc, w, h, mc,flag):
+    for i in range(w): 
+        for j in range(h):
+            if arr[i][j] == bc and maskedarr[i][j] != flag:
+                return False
+            elif arr[i][j] != bc and maskedarr[i][j] == mc:
+                return False
+    return True 
+
 
 def start(h, w, ws, bt, bc, mc): #basic tui for testing  # height, width, white space, bomb count, bomb character, masked character
     maskedarr = [[mc for _ in range(h)] for _ in range(w)]
