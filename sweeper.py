@@ -1,19 +1,22 @@
 from random import randint
+from rich.console import Console
+import keyboard
+import time
 
 def createnoise(w, h, bt, ws, bc,cx,cy):  # width, height, bomb count, white space, bomb character
     arr = [[ws for _ in range(h)] for _ in range(w)]
     bombs_placed = 0
     while bombs_placed < bt:
         x, y = randint(0, w - 1), randint(0, h - 1)
-        if arr[x][y] != bc and (x,y) != (cx,cy):  # Only place a bomb if the cell is empty and not the inputc = bc
+        if arr[y][x] != bc and (x,y) != (cx,cy):  # Only place a bomb if the cell is empty and not the clicked cell
             bombs_placed += 1
     return arr
 
-def countbombs(arr):  # count the bombs around each cell
+def countbombs(arr,bc):  # count the bombs around each cell
     w, h = len(arr), len(arr[0])
     for i in range(w):
         for j in range(h):
-            if arr[i][j] == "*":
+            if arr[i][j] == bc:
                 continue
             count = 0
             for x in range(-1, 2):
@@ -25,33 +28,39 @@ def countbombs(arr):  # count the bombs around each cell
             arr[i][j] = count
     return arr
 
-def printarr(arr):  # print the array
-    for i in arr:
-        for j in i:
-            print(j, end=" ")
-        print()
-    print()
+def printarr(arr,sx,sy):  # print the array
+    console = Console()
+    console.clear()
+    buffer = ""
+    for i in range(len(arr)):
+        for j in range(len(arr[i])):
+            if (i,j) == (sy,sx):
+                buffer+="[r]"+arr[i][j]+"[/r]"
+            else: buffer+=arr[i][j]
+        buffer+="\n"
+    console.print(buffer)
 
 def click(arr, maskedarr, x, y, ws, w, h, mc): 
-    if arr[x][y] == "*":
-        print("Game Over")
+    console=Console()
+    if arr[y][x] == mc:
+        console.print("Game Over")
         return maskedarr, False
-    elif arr[x][y] == 0 and maskedarr[x][y] == mc:
-        maskedarr[x][y] = ws
+    elif arr[y][x] == 0 and maskedarr[y][x] == mc:
+        maskedarr[y][x] = ws
         for i in range(-1, 2):
             for j in range(-1, 2):
                 if x + i < 0 or x + i >= len(arr) or y + j < 0 or y + j >= len(arr[0]):
                     continue
-                click(arr, maskedarr, x + i, y + j, ws, w, h, mc)
+                maskedarr,coconutphoto=click(arr, maskedarr, x + i, y + j, ws, w, h, mc)
     else:
-        maskedarr[x][y] = str(arr[x][y])
+        maskedarr[y][x] = str(arr[y][x])
     return maskedarr, True
 
-def flag(maskedarr, x, y, mc):  # flag a cell
-    if maskedarr[x][y] == mc:
-        maskedarr[x][y] = flag
-    elif maskedarr[x][y] == flag:
-        maskedarr[x][y] = mc
+def flag(maskedarr, x, y, mc,fc):  # flag a cell
+    if maskedarr[y][x] == mc:
+        maskedarr[y][x] = fc
+    elif maskedarr[y][x] == fc:
+        maskedarr[y][x] = mc
     return maskedarr
 
 def checkwin(arr,maskedarr, bc, w, h, mc,flag):
@@ -63,23 +72,103 @@ def checkwin(arr,maskedarr, bc, w, h, mc,flag):
                 return False
     return True 
 
-def inputc():
-    return input("Enter coords (y x)")
+def select(maskedarr,sx,sy,game):
+    selected = False
+    action = ""
+    pressed = False
+    while not selected and game:
+        printarr(maskedarr, sx, sy)
+        event = keyboard.read_event()
+        if event.event_type == keyboard.KEY_DOWN:  # Check if the key is pressed down
+            if event.name == "d" and sx < len(maskedarr[0]) - 1:
+                sx += 1
+            elif event.name == "a" and sx > 0:
+                sx -= 1
+            elif event.name == "s" and sy < len(maskedarr) - 1:
+                sy += 1
+            elif event.name == "w" and sy > 0:
+                sy -= 1
+            elif event.name == "z":
+                action = "click"
+                selected = True
+            elif event.name == "x":
+                action = "flag"
+                selected = True
+            elif event.name == "q":
+                action = "quit"
+                selected = True
+    return action, sx, sy
 
-def start(h, w, ws, bt, bc, mc): #basic tui for testing  # height, width, white space, bomb count, bomb character, masked character
-    maskedarr = [[mc for _ in range(h)] for _ in range(w)]
-    cy, cx = map(int, inputc().split())
-    arr = createnoise(w, h, bt, ws, bc, cx,cy)
-    arr = countbombs(arr)  # Count bombs before clicking
+
+def main(h,w,bt,bc,mc,ws,fc):
     game = True
-    maskedarr,game = click(arr, maskedarr, cx, cy, ws, w, h, mc)
-    while game:
-        printarr(maskedarr)
-        y,x = map(int, inputc().split())
-        if maskedarr[x][y] == mc:
-            maskedarr,game = click(arr, maskedarr, x, y, ws, w, h, mc)
+    sx,sy = 0,0
+    maskedarr = [[mc for _ in range(h)] for _ in range(w)]
+    action, sx, sy = select(maskedarr,sx,sy,game)
+    cx,cy = sx,sy
+    arr = createnoise(w, h, bt, ws, bc, cx,cy)
+    arr = countbombs(arr,bc)  # Count bombs before clicking
+    console=Console()
+    if action == "click":
+        if maskedarr[sy][sx] == mc:
+            maskedarr,game = click(arr, maskedarr, sx, sy, ws, w, h, mc)
         else:
-            print("Already clicked")
+            console.print("Already clicked")
+    elif action == "flag":
+        maskedarr = flag(maskedarr, sx, sy, mc,fc)
+    elif action == "quit":
+        exit()
+    while game:
+        action,sx,sy=select(maskedarr,sx,sy,game)
+        if action == "click":
+            if maskedarr[sy][sx] == mc:
+                maskedarr,game = click(arr, maskedarr, sx, sy, ws, w, h, mc)
+            else:
+                console.print("Already clicked")
+        elif action == "flag":
+            maskedarr = flag(maskedarr, sx, sy, mc,fc)
+        elif action == "quit":
+            break
+        if checkwin(arr, maskedarr, bc, w, h, mc,fc):
+            console.print("You win")
+            break
 
-start(5, 5, "o", 5, "*", "O")
+def titlescreen():
+    console = Console()
+    console.print("Welcome to Minesweeper!")
+    console.print("select difficulty")
+    selected = ""
+    ind = 0
+    difficulties = {"Beginner":(8,8,10), "Intermediate":(16,16,40), "Expert":(30,16,99),"Custom":(0,0,0)}
+    buffer ="Welcome to Minesweeper! \n select difficulty"
+    for i in range(len(difficulties)):
+            buffer += "\n"+f"{i+1}. {list(difficulties.keys())[i]}"
+    while selected == "":
+        console.clear()
+        console.print(buffer)
+        time.sleep(0.1)
+        buffer ="Welcome to Minesweeper! \n select difficulty"
+        event = keyboard.read_event()
+        if event.event_type == keyboard.KEY_DOWN and event.name == "down":
+            ind+=1
+        elif event.event_type== keyboard.KEY_DOWN and event.name == "up":
+            ind-=1
+        elif event.event_type == keyboard.KEY_DOWN and event.name == "enter":
+            selected = list(difficulties.keys())[ind]
+        for i in range(len(difficulties)):
+            if i == ind:
+                buffer += "\n"+f"[r]{i+1}. {list(difficulties.keys())[i]}[/r]"
+            else:
+                buffer += "\n"+f"{i+1}. {list(difficulties.keys())[i]}"
+    console.print("You selected: "+selected)
+    if selected == "Custom":
+        input()
+        w = int(input("Enter width: "))
+        h = int(input("Enter height: "))
+        bt = int(input("Enter bomb count: "))
+    else:
+        w,h,bt = difficulties[selected]
+    main(h,w, bt, "#", "[cyan on blue]  [/]", "o","[pink on red]  [/]")
 
+if __name__ == "__main__":
+    titlescreen()
