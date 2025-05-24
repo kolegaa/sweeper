@@ -4,6 +4,7 @@ import keyboard
 import time
 
 def exit_game():
+    keyboard.unhook_all()
     exit()
 
 def printendarr(arr,bc):
@@ -135,7 +136,7 @@ def select(maskedarr,sx,sy,game,flags):
     action = ""
     while not selected and game:
         printarr(maskedarr, sx, sy)
-        event = keyboard.read_event()
+        event = keyboard.read_event(suppress=True)
         if event.event_type == keyboard.KEY_DOWN:  # Check if the key is pressed down
             if event.name == "right" and sx < len(maskedarr[0]) - 1:
                 sx += 1
@@ -210,9 +211,9 @@ def titlescreen():
     while selected == "":
         console.clear()
         console.print(buffer)
-        time.sleep(0.1)
+
         buffer ="Welcome to Minesweeper! \n select difficulty"
-        event = keyboard.read_event()
+        event = keyboard.read_event(suppress=True)
         if event.event_type == keyboard.KEY_DOWN and event.name == "down":
             ind+=1
         elif event.event_type== keyboard.KEY_DOWN and event.name == "up":
