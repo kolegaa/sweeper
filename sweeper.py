@@ -139,8 +139,16 @@ class MinesweeperGame:
                 if first_move:
                     self.setup(self.cursor_x, self.cursor_y)
                     first_move = False
-                if not self.reveal(self.cursor_x, self.cursor_y):
-                    break
+                    if not self.reveal(self.cursor_x, self.cursor_y):
+                        break
+                else:
+                    # Try chord reveal first, if not possible do regular reveal
+                    if isinstance(self.masked[self.cursor_y][self.cursor_x], int):
+                        if not self.chord_reveal(self.cursor_x, self.cursor_y):
+                            break
+                    else:
+                        if not self.reveal(self.cursor_x, self.cursor_y):
+                            break
                 if self.check_win():
                     self.show_end_screen("You win! Press any key to exit")
                     break
@@ -151,6 +159,29 @@ class MinesweeperGame:
             else:
                 uc.mvaddstr(self.height + 2, 0, f"KEY: {key}   ")  # Show key code at bottom
                 uc.refresh()
+
+    def chord_reveal(self, x, y):
+        # Only chord on revealed numbers
+        if not isinstance(self.masked[y][x], int):
+            return True
+
+        # Count adjacent flags
+        flag_count = sum(
+            1 for dx in range(-1, 2) for dy in range(-1, 2)
+            if 0 <= x + dx < self.width and 0 <= y + dy < self.height
+            and self.masked[y + dy][x + dx] == self.FLAG
+        )
+
+        # If flag count matches the number, reveal all non-flagged adjacent cells
+        if flag_count == self.masked[y][x]:
+            for dx in range(-1, 2):
+                for dy in range(-1, 2):
+                    nx, ny = x + dx, y + dy
+                    if (0 <= nx < self.width and 0 <= ny < self.height and 
+                        self.masked[ny][nx] != self.FLAG):
+                        if not self.reveal(nx, ny):
+                            return False
+        return True
 
 def exit_game():
     uc.endwin()
