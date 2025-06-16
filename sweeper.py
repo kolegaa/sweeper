@@ -72,7 +72,7 @@ class MinesweeperGame:
         if self.masked[y][x] == self.FLAG:
             return True
         if self.arr[y][x] == self.BOMB:
-            self.show_end_screen("Game Over! Press any key to exit")
+            self.show_end_screen("Game Over! Press any key to continue")
             return False
         self._reveal_recursive(x, y)
         return True
@@ -107,13 +107,15 @@ class MinesweeperGame:
 
     def show_end_screen(self, message):
         # Reveal all spaces when game is lost
+        uc.nodelay(self.stdscr, True)
         for y in range(self.height):
-            for x in range(self.width):
-                self.masked[y][x] = self.arr[y][x]
+            self.masked[y] = self.arr[y]
         
-        self.draw()
-        uc.mvaddstr(self.height + 1, 0, message)
-        uc.refresh()
+            self.draw()
+            uc.mvaddstr(self.height + 1, 0, message)
+            uc.refresh()
+            uc.getch()
+        uc.nodelay(self.stdscr, False)
         uc.getch()
         self.game_over = True
 
@@ -150,15 +152,12 @@ class MinesweeperGame:
                         if not self.reveal(self.cursor_x, self.cursor_y):
                             break
                 if self.check_win():
-                    self.show_end_screen("You win! Press any key to exit")
+                    self.show_end_screen("You win! Press any key to continue")
                     break
             elif key == ord('x'):
                 self.toggle_flag(self.cursor_x, self.cursor_y)
             elif key == ord('q'):
                 exit_game()
-            else:
-                uc.mvaddstr(self.height + 2, 0, f"KEY: {key}   ")  # Show key code at bottom
-                uc.refresh()
 
     def chord_reveal(self, x, y):
         # Only chord on revealed numbers
@@ -185,7 +184,7 @@ class MinesweeperGame:
 
 def exit_game():
     uc.endwin()
-    exit()
+    exit(0)
 
 def init_colors():
     uc.start_color()
