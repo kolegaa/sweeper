@@ -1,240 +1,268 @@
+import unicurses as uc
 from random import randint
-from rich.console import Console
-import keyboard
-import time
+
+class MinesweeperGame:
+    def __init__(self, width, height, bombs, stdscr):
+        self.width = width
+        self.height = height
+        self.bombs = bombs
+        self.stdscr = stdscr
+
+        # Game characters
+        self.BOMB = "#"
+        self.MASKED = "."
+        self.EMPTY = " "
+        self.FLAG = "F"
+
+        self.flags = 0
+        self.game_over = False
+        self.arr = [[self.EMPTY for _ in range(width)] for _ in range(height)]
+        self.masked = [[self.MASKED for _ in range(width)] for _ in range(height)]
+        self.cursor_x = 0
+        self.cursor_y = 0
+
+    def setup(self, first_x, first_y):
+        self.arr = [[self.EMPTY for _ in range(self.width)] for _ in range(self.height)]
+        self.masked = [[self.MASKED for _ in range(self.width)] for _ in range(self.height)]
+        self.flags = 0
+        self.game_over = False
+        self.place_bombs(first_x, first_y)
+        self.count_bombs()
+
+    def place_bombs(self, cx, cy):
+        placed = 0
+        while placed < self.bombs:
+            x, y = randint(0, self.width - 1), randint(0, self.height - 1)
+            if self.arr[y][x] != self.BOMB and (x, y) != (cx, cy):
+                # Don't place bomb on first click or adjacent
+                if not any((cx + dx, cy + dy) == (x, y) for dx in range(-1, 2) for dy in range(-1, 2)):
+                    self.arr[y][x] = self.BOMB
+                    placed += 1
+
+    def count_bombs(self):
+        for y in range(self.height):
+            for x in range(self.width):
+                if self.arr[y][x] == self.BOMB:
+                    continue
+                count = sum(
+                    1 for dx in range(-1, 2) for dy in range(-1, 2)
+                    if 0 <= x + dx < self.width and 0 <= y + dy < self.height
+                    and self.arr[y + dy][x + dx] == self.BOMB
+                )
+                self.arr[y][x] = count if count else self.EMPTY
+
+    def draw(self, highlight_x=None, highlight_y=None):
+        uc.clear()
+        for y in range(self.height):
+            for x in range(self.width):
+                cell = self.masked[y][x]
+                attr = 0
+                if (x, y) == (highlight_x, highlight_y):
+                    attr = uc.color_pair(2)
+                elif cell == self.BOMB:
+                    attr = uc.color_pair(1)
+                elif cell == self.FLAG:
+                    attr = uc.color_pair(3)
+                elif isinstance(cell, int):
+                    attr = uc.color_pair(cell + 3)
+                uc.mvaddstr(y, x, str(cell), attr)  # y, x order is correct for curses
+        uc.refresh()
+
+    def reveal(self, x, y):
+        if self.masked[y][x] == self.FLAG:
+            return True
+        if self.arr[y][x] == self.BOMB:
+            self.show_end_screen("Game Over! Press any key to continue")
+            return False
+        self._reveal_recursive(x, y)
+        return True
+
+    def _reveal_recursive(self, x, y):
+        if self.masked[y][x] != self.MASKED:
+            return
+        self.masked[y][x] = self.arr[y][x]
+        if self.arr[y][x] == self.EMPTY:
+            for dx in range(-1, 2):
+                for dy in range(-1, 2):
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < self.width and 0 <= ny < self.height:
+                        self._reveal_recursive(nx, ny)
+
+    def toggle_flag(self, x, y):
+        if self.masked[y][x] == self.MASKED:
+            self.masked[y][x] = self.FLAG
+            self.flags += 1
+        elif self.masked[y][x] == self.FLAG:
+            self.masked[y][x] = self.MASKED
+            self.flags -= 1
+
+    def check_win(self):
+        for y in range(self.height):
+            for x in range(self.width):
+                if self.arr[y][x] == self.BOMB and self.masked[y][x] != self.FLAG:
+                    return False
+                if self.arr[y][x] != self.BOMB and self.masked[y][x] == self.MASKED:
+                    return False
+        return True
+
+    def show_end_screen(self, message):
+        # Reveal all spaces when game is lost
+        uc.nodelay(self.stdscr, True)
+        for y in range(self.height):
+            self.masked[y] = self.arr[y]
+        
+            self.draw()
+            uc.mvaddstr(self.height + 1, 0, message)
+            uc.refresh()
+            uc.getch()
+        uc.nodelay(self.stdscr, False)
+        uc.getch()
+        self.game_over = True
+
+    def play(self):
+        self.cursor_x, self.cursor_y = 0, 0
+        first_move = True
+        while not self.game_over:
+            self.draw(self.cursor_x, self.cursor_y)
+            key = uc.wgetch(self.stdscr)
+            # Move right
+            if key in (uc.KEY_RIGHT, 261, 454, ord('d'), ord('l')) and self.cursor_x < self.width - 1:
+                self.cursor_x += 1
+            # Move left
+            elif key in (uc.KEY_LEFT, 260, 452, ord('a'), ord('h')) and self.cursor_x > 0:
+                self.cursor_x -= 1
+            # Move down
+            elif key in (uc.KEY_DOWN, 258, 456, ord('s'), ord('j')) and self.cursor_y < self.height - 1:
+                self.cursor_y += 1
+            # Move up
+            elif key in (uc.KEY_UP, 259, 450, ord('w'), ord('k')) and self.cursor_y > 0:
+                self.cursor_y -= 1
+            elif key == ord('z'):
+                if first_move:
+                    self.setup(self.cursor_x, self.cursor_y)
+                    first_move = False
+                    if not self.reveal(self.cursor_x, self.cursor_y):
+                        break
+                else:
+                    # Try chord reveal first, if not possible do regular reveal
+                    if isinstance(self.masked[self.cursor_y][self.cursor_x], int):
+                        if not self.chord_reveal(self.cursor_x, self.cursor_y):
+                            break
+                    else:
+                        if not self.reveal(self.cursor_x, self.cursor_y):
+                            break
+                if self.check_win():
+                    self.show_end_screen("You win! Press any key to continue")
+                    break
+            elif key == ord('x'):
+                self.toggle_flag(self.cursor_x, self.cursor_y)
+            elif key == ord('q'):
+                exit_game()
+
+    def chord_reveal(self, x, y):
+        # Only chord on revealed numbers
+        if not isinstance(self.masked[y][x], int):
+            return True
+
+        # Count adjacent flags
+        flag_count = sum(
+            1 for dx in range(-1, 2) for dy in range(-1, 2)
+            if 0 <= x + dx < self.width and 0 <= y + dy < self.height
+            and self.masked[y + dy][x + dx] == self.FLAG
+        )
+
+        # If flag count matches the number, reveal all non-flagged adjacent cells
+        if flag_count == self.masked[y][x]:
+            for dx in range(-1, 2):
+                for dy in range(-1, 2):
+                    nx, ny = x + dx, y + dy
+                    if (0 <= nx < self.width and 0 <= ny < self.height and 
+                        self.masked[ny][nx] != self.FLAG):
+                        if not self.reveal(nx, ny):
+                            return False
+        return True
 
 def exit_game():
-    keyboard.unhook_all()
-    exit()
+    uc.endwin()
+    exit(0)
 
-def printendarr(arr,bc):
-    console = Console()
-    console.clear()
-    buffer = ""
-    for i in range(len(arr)):
-        for j in range(len(arr[i])):
-            if arr[i][j] == bc:
-                buffer+="[red]"+str(arr[i][j])+"[/]"
-            else: buffer+=str(arr[i][j])
-        buffer+="\n"
-    console.print(buffer)
+def init_colors():
+    uc.start_color()
+    uc.init_pair(1, uc.COLOR_RED, uc.COLOR_BLACK)      # Bomb
+    uc.init_pair(2, uc.COLOR_BLACK, uc.COLOR_WHITE)    # Cursor
+    uc.init_pair(3, uc.COLOR_RED, uc.COLOR_BLACK)      # Flag
+    for i in range(1, 9):
+        uc.init_pair(3 + i, i, uc.COLOR_BLACK)         # Numbers
 
-def createnoise(arr,w, h, bt, bc,cx,cy):  # width, height, bomb count, white space, bomb character
-    bombs_placed = 0
-    while bombs_placed < bt:
-        x, y = randint(0, w - 1), randint(0, h - 1)
-        if arr[y][x] != bc and (x,y) != (cx,cy):
-            # Check 3x3 area around first click
-            canplace = True
-            for i in range(-1, 2):  # Fixed range
-                for j in range(-1, 2):
-                    if (cx + j == x) and (cy + i == y):
-                        canplace = False
-                        break
-                if not canplace:
-                    break
-            if canplace:
-                bombs_placed += 1
-                arr[y][x] = bc
-    return arr
-
-def countbombs(arr,bc,ws):  # count the bombs around each cell
-    w, h = len(arr[0]), len(arr)
-    for i in range(h):
-        for j in range(w):
-            if arr[i][j] == bc:
-                continue
-            count = 0
-            for x in range(-1, 2):
-                for y in range(-1, 2):
-                    if i + x < 0 or i + x >= h or j + y < 0 or j + y >= w:
-                        continue
-                    if arr[i + x][j + y] == bc:
-                        count += 1
-            if count != 0: arr[i][j] = count
-            else: arr[i][j] = ws
-    return arr
-
-def printarr(arr,sx,sy):  # print the array
-    console = Console()
-    console.clear()
-    buffer = ""
-    for i in range(len(arr)):
-        for j in range(len(arr[i])):
-            if (i,j) == (sy,sx):
-                buffer+="[r]"+str(arr[i][j])+"[/r]"
-            else: buffer+=str(arr[i][j])
-        buffer+="\n"
-    console.print(buffer)
-
-def countflagsforcell(maskedarr, x, y, fc):
-    count = 0
-    for dy in range(-1, 2):
-        for dx in range(-1, 2):
-            if dx == 0 and dy == 0:
-                continue  # Skip self
-            nx = x + dx
-            ny = y + dy
-            if 0 <= nx < len(maskedarr[0]) and 0 <= ny < len(maskedarr):
-                if maskedarr[ny][nx] == fc:
-                    count += 1
-    return count
-
-def click(arr, maskedarr, x, y, ws, w, h, mc,bc,fc):
-    console=Console()
-    # Skip if cell is flagged
-    if maskedarr[y][x] == fc:
-        return maskedarr, True
-    if arr[y][x] == bc:
-        printendarr(arr,bc)
-        console.print("Game Over")
-        return maskedarr, False
-    elif arr[y][x] == ws and maskedarr[y][x] == mc:
-        maskedarr[y][x] = ws
-        for i in range(-1, 2):
-            for j in range(-1, 2):
-                if x + j < 0 or x + j >= w or y + i < 0 or y + i >= h:
-                    continue
-                if maskedarr[y + i][x + j] == mc:
-                    maskedarr, _ = click(arr, maskedarr, x + j, y + i, ws, w, h, mc, bc, fc)
-    elif isinstance(maskedarr[y][x], int) and arr[y][x] == maskedarr[y][x]:
-        # Chord reveal logic
-        if countflagsforcell(maskedarr, x, y, fc) == arr[y][x]:
-            for dy in range(-1, 2):
-                for dx in range(-1, 2):
-                    nx = x + dx
-                    ny = y + dy
-                    if 0 <= nx < w and 0 <= ny < h:
-                        if maskedarr[ny][nx] == mc:
-                            maskedarr, game = click(arr, maskedarr, nx, ny, ws, w, h, mc, bc, fc)
-                            if not game:
-                                return maskedarr, False
-    else:
-        maskedarr[y][x] = arr[y][x]  # Store as integer instead of string
-    return maskedarr, True
-
-def flag(maskedarr, x, y, mc,fc,flags):  # flag a cell
-    if maskedarr[y][x] == mc:
-        maskedarr[y][x] = fc
-        flags +=1
-    elif maskedarr[y][x] == fc:
-        maskedarr[y][x] = mc
-        flags -=1
-    return maskedarr,flags
-
-def checkwin(arr,maskedarr, bc, w, h, mc,flag):
-    for i in range(h): 
-        for j in range(w):
-            if arr[i][j] == bc and maskedarr[i][j] != flag:
-                return False
-            elif arr[i][j] != bc and maskedarr[i][j] == mc:
-                return False
-    return True 
-
-def select(maskedarr,sx,sy,game,flags):
-    selected = False
-    action = ""
-    while not selected and game:
-        printarr(maskedarr, sx, sy)
-        event = keyboard.read_event(suppress=True)
-        if event.event_type == keyboard.KEY_DOWN:  # Check if the key is pressed down
-            if event.name == "right" and sx < len(maskedarr[0]) - 1:
-                sx += 1
-            elif event.name == "left" and sx > 0:
-                sx -= 1
-            elif event.name == "down" and sy < len(maskedarr) - 1:
-                sy += 1
-            elif event.name == "up" and sy > 0:
-                sy -= 1
-            elif event.name == "z":
-                action = "click"
-                selected = True
-            elif event.name == "x":
-                action = "flag"
-                selected = True
-            elif event.name == "q":
-                action = "quit"
-                selected = True
-    return action, sx, sy
-
-def main(h,w,bt,bc,mc,ws,fc): # height, width, bomb count, bomb character, masked character, white space, flagged character
-    console=Console()
-    game = True
-    sx,sy = 0,0
-    flags = 0
-    maskedarr = [[mc for _ in range(w)] for _ in range(h)]
-    action, sx, sy = select(maskedarr,sx,sy,game,flags)
-    cx,cy = sx,sy
-    arr = [[ws for _ in range(w)] for _ in range(h)]
-    arr = createnoise(arr,w, h, bt, bc, cx,cy)
-    arr = countbombs(arr,bc,ws)  # Count bombs before clicking
-
-    if action == "click":
-        maskedarr,game = click(arr, maskedarr, sx, sy, ws, w, h, mc,bc,fc)
-    elif action == "flag":
-        maskedarr,flags = flag(maskedarr, sx, sy, mc,fc,flags)
-    elif action == "quit":
-        exit_game()
-
-    if checkwin(arr, maskedarr, bc, w, h, mc,fc):
-            printendarr(arr,bc)
-            console.print("You win")
-            exit_game()
-
-    while game:
-        action,sx,sy=select(maskedarr,sx,sy,game,flags)
-        if action == "click":
-            maskedarr,game = click(arr, maskedarr, sx, sy, ws, w, h, mc,bc,fc)
-        elif action == "flag":
-            maskedarr,flags  = flag(maskedarr, sx, sy, mc,fc,flags)
-        elif action == "quit":
-            exit_game()
-        if checkwin(arr, maskedarr, bc, w, h, mc,fc):
-            printendarr(arr,bc)
-            console.print("You win")
-            exit_game()
-    exit_game()
-
-def titlescreen():
-    console = Console()
-    console.print("Welcome to Minesweeper!")
-    console.print("select difficulty")
-    selected = ""
+def titlescreen(stdscr):
+    uc.clear()
+    uc.mvaddstr(0, 0, "Welcome to Minesweeper!")
+    uc.mvaddstr(1, 0, "Select difficulty")
+    difficulties = {
+        "Beginner": (8, 8, 10),
+        "Intermediate": (16, 16, 40),
+        "Expert": (30, 16, 99),
+        "Custom": (0, 0, 0)
+    }
+    keys = list(difficulties.keys())
     ind = 0
-    difficulties = {"Beginner":(8,8,10), "Intermediate":(16,16,40), "Expert":(30,16,99),"Custom":(0,0,0)}
-    buffer ="Welcome to Minesweeper! \n select difficulty"
-    for i in range(len(difficulties)):
-            if i == ind:
-                buffer += "\n"+f"[r]{i+1}. {list(difficulties.keys())[i]}[/r]"
-            else:
-                buffer += "\n"+f"{i+1}. {list(difficulties.keys())[i]}"
-    while selected == "":
-        console.clear()
-        console.print(buffer)
 
-        buffer ="Welcome to Minesweeper! \n select difficulty"
-        event = keyboard.read_event(suppress=True)
-        if event.event_type == keyboard.KEY_DOWN and event.name == "down":
-            ind+=1
-        elif event.event_type== keyboard.KEY_DOWN and event.name == "up":
-            ind-=1
-        elif event.event_type==keyboard.KEY_DOWN and event.name == "q":
+    while True:
+        for i, name in enumerate(keys):
+            attr = uc.A_REVERSE if i == ind else 0
+            uc.mvaddstr(i + 2, 0, f"{i + 1}. {name}", attr)
+        uc.refresh()
+        key = uc.wgetch(stdscr)
+        if key in (uc.KEY_DOWN, 258, 456, ord('s'), ord('j')) and ind < len(keys) - 1:
+            ind += 1
+        elif key in (uc.KEY_UP, 259, 450, ord('w'), ord('k')) and ind > 0:
+            ind -= 1
+        elif key == ord('q'):
             exit_game()
-        elif event.event_type == keyboard.KEY_DOWN and event.name == "enter":
-            selected = list(difficulties.keys())[ind]
-        for i in range(len(difficulties)):
-            if i == ind:
-                buffer += "\n"+f"[r]{i+1}. {list(difficulties.keys())[i]}[/r]"
-            else:
-                buffer += "\n"+f"{i+1}. {list(difficulties.keys())[i]}"
-    console.print("You selected: "+selected)
+        elif key == 10:  # Enter
+            selected = keys[ind]
+            break
+
+    uc.clear()
+    uc.mvaddstr(0, 0, f"You selected: {selected}")
+    uc.refresh()
+
     if selected == "Custom":
-        w = int(console.input("Enter width: "))
-        h = int(console.input("Enter height: "))
-        bt = int(console.input("Enter bomb count: "))
+        uc.mvaddstr(1, 0, "Enter width: ")
+        uc.echo()
+        w = int(uc.getstr(1, 12).decode('utf-8'))
+        uc.mvaddstr(2, 0, "Enter height: ")
+        h = int(uc.getstr(2, 13).decode('utf-8'))
+        uc.mvaddstr(3, 0, "Enter bomb count: ")
+        bt = int(uc.getstr(3, 17).decode('utf-8'))
+        uc.noecho()
     else:
-        w,h,bt = difficulties[selected]
-    main(h,w, bt, "#", "[default on blue] [/]", "[default on default] [/]","[bright_red on red] [/]") # height, width, bomb count, bomb character, masked character, white space, flag character
+        w, h, bt = difficulties[selected]
+
+    init_colors()
+    return w, h, bt
+
+def mainloop(stdscr):
+    while True:
+        w, h, bt = titlescreen(stdscr)
+        game = MinesweeperGame(w, h, bt, stdscr)
+        game.play()
+        uc.clear()
+        uc.mvaddstr(0, 0, "Press Q to quit or any other key to play again")
+        uc.refresh()
+        key = uc.wgetch(stdscr)
+        if key == ord('q'):
+            break
 
 if __name__ == "__main__":
-    titlescreen()
+    stdscr = uc.initscr()
+    uc.noecho()
+    uc.cbreak()
+    uc.keypad(stdscr, True)
+    uc.curs_set(0)
+    if uc.has_colors():
+        uc.start_color()
+    try:
+        mainloop(stdscr)
+    finally:
+        exit_game()
