@@ -84,7 +84,7 @@ def click(arr, maskedarr, x, y, ws, w, h, mc, bc, fc, stdscr):
         return maskedarr, True
     if arr[y][x] == bc:
         printendarr(arr, bc, stdscr)
-        uc.mvaddstr(h+1, 0, "Game Over! Press any key to exit")
+        uc.mvaddstr(h+1, 0, "Game Over! Press q to exit")
         uc.refresh()
         uc.getch()
         return maskedarr, False
